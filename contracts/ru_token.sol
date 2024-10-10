@@ -182,6 +182,7 @@ function getNonce(address multisigAddr) public view returns (uint) {
      * Burn `amount` tokens. The corresponding value (`tokenPrice` for each token) is sent to the caller.
      */
     function burn(uint amount) public {
+        require(balances[msg.sender] >= amount, "Insufficient balance for burn");
         // TODO: Implement
         require((balances[msg.sender] - amount) >= 0);
         require(msg.sender != address(0));
@@ -246,25 +247,71 @@ function getNonce(address multisigAddr) public view returns (uint) {
      *
      * Emits a {Transfer} event.
      */
-    function transfer2of3(address multisigOwner, address recipient, uint256 amount, uint nonce, Signature calldata secondSig) external returns (bool){
-        require(multisigOwner != address(0));
-        require(nonce == multiAdd[multisigOwner].nonce + 1);
-        require(recipient != address(0));
-        require(amount > 0);
-        address secondSig_address = ecrecover(keccak256(abi.encodePacked(address(this), recipient, multisigOwner, amount, nonce)), secondSig.v, secondSig.r, secondSig.s);
-        require(msg.sender != secondSig_address);
-        require(secondSig_address != address(0));
-        address multisig_address_pk1 = multiAdd[multisigOwner].pks_list[0];
-        address multisig_address_pk2 = multiAdd[multisigOwner].pks_list[1];
-        address multisig_address_pk3 = multiAdd[multisigOwner].pks_list[2];
-        require(multisig_address_pk1 == msg.sender || multisig_address_pk2 == msg.sender || multisig_address_pk3 == msg.sender);
-        require(multisig_address_pk1 == secondSig_address || multisig_address_pk2 == secondSig_address || multisig_address_pk3 == secondSig_address);
-        multiAdd[multisigOwner].nonce += 1;
-        require(transferFrom_multisig(multisigOwner, recipient, amount));
+    function transfer2of3(
+    address multisigOwner,
+    address recipient,
+    uint256 amount,
+    uint nonce,
+    Signature calldata secondSig
+) external returns (bool) {
+    // Ensure the multisigOwner and recipient are not the same
+    require(multisigOwner != recipient, "Multisig owner and recipient cannot be the same");
+    
+    // Ensure the multisigOwner and msg.sender are not the same
+    require(multisigOwner != msg.sender, "Multisig owner and sender cannot be the same");
+    
+    // Ensure msg.sender and recipient are not the same
+    require(msg.sender != recipient, "Sender and recipient cannot be the same");
+    
+    // Ensure valid addresses for multisigOwner and recipient
+    require(multisigOwner != address(0), "Multisig owner cannot be zero address");
+    require(recipient != address(0), "Recipient cannot be zero address");
+    
+    // Amount must be greater than zero
+    require(amount > 0, "Amount must be greater than zero");
+    
+    // Ensure the correct nonce is used
+    require(nonce == multiAdd[multisigOwner].nonce + 1, "Invalid nonce");
+    
+    // Recover the second signature
+    bytes32 messageHash = keccak256(
+        abi.encodePacked(address(this), recipient, multisigOwner, amount, nonce)
+    );
+    address secondSigner = ecrecover(messageHash, secondSig.v, secondSig.r, secondSig.s);
+    
+    // Ensure the second signature is valid and not the same as msg.sender
+    require(secondSigner != address(0), "Invalid second signature");
+    require(secondSigner != msg.sender, "Sender and second signer cannot be the same");
+    
+    // Retrieve multisig keys
+    address[] memory multisigKeys = multiAdd[multisigOwner].pks_list;
+    
+    // Ensure msg.sender is a valid multisig owner
+    bool isValidSender = (
+        msg.sender == multisigKeys[0] || 
+        msg.sender == multisigKeys[1] || 
+        msg.sender == multisigKeys[2]
+    );
+    require(isValidSender, "Sender is not a valid multisig key");
+    
+    // Ensure secondSigner is a valid multisig owner
+    bool isValidSecondSigner = (
+        secondSigner == multisigKeys[0] || 
+        secondSigner == multisigKeys[1] || 
+        secondSigner == multisigKeys[2]
+    );
+    require(isValidSecondSigner, "Second signer is not a valid multisig key");
+    
+    // Increment nonce and perform the transfer
+    multiAdd[multisigOwner].nonce += 1;
+    require(transferFrom_multisig(multisigOwner, recipient, amount), "Transfer failed");
 
-        return true;
+    return true;
+}
 
-    }
+
+
+
 
 
 }

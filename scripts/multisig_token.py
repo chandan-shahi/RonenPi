@@ -3,6 +3,7 @@ from eth_keys import KeyAPI
 from eth_keys.backends import NativeECCBackend
 from ape import project
 from web3 import Web3 # help with hashing
+from eth_utils import is_address
 
 RUToken = project.RUToken
 
@@ -22,34 +23,35 @@ class Signature:
 # This function should return a nonce and a signature 
 # that can be passed to transfer2of3.
 # Note: The function should *not* change state in any way (e.g., if you call contract methods, call only `view` and `pure` methods`)).
-def generate_nonce_and_second_signature_transfer2of3(tok: RUToken, sk, multisigAddr, spender, amount) -> Tuple[int,Signature]: # type: ignore
-    key = keys.PrivateKey(bytes.fromhex(sk[2:])) # Can be used with `keys.ecdsa_sign``
+def generate_nonce_and_second_signature_transfer2of3(tok: RUToken, sk, multisigAddr, spender, amount) -> Tuple[int, Signature]:
+    key = keys.PrivateKey(bytes.fromhex(sk[2:]))
 
-    # TODO: Implement
+    # Get the current nonce and increment
+    nonce = tok.getNonce(multisigAddr) + 1
+
+     # If spender is a string (raw address), leave it as is; otherwise, use spender.address
+    if is_address(spender):
+        spender_address = spender
+    else:
+        spender_address = spender.address
+
+    print("generate_nonce_and_second_signature_transfer2of3------",spender_address)
     
-    nonce = tok.getNonce(multisigAddr)
 
-    # Structured to prevent replay attacks
-    nonce += 1
+     # Hash the message using correct parameters and order
+    message_hash = Web3.solidity_keccak(
+        ['address', 'address', 'address', 'uint256', 'uint256'],
+        [tok.address, spender_address, multisigAddr, amount, nonce]
+    )
 
-    print("tok------",tok)
-    print("spender------",spender)
-    print("multisigAddr------",multisigAddr)
-
-    # hashing the message
-    message_hash = Web3.solidity_keccak(['address', 'address', 'address', 'uint256', 'uint256']
-                                       , [tok.address, spender.address, multisigAddr, amount, nonce])
-    print("message_hash------",message_hash)
+    # Sign the message
     message_signed = keys.ecdsa_sign(message_hash, key)
-    print("message_signed------",message_signed)
-    print("message_signed.r------",message_signed.r)
-    print("message_signed.s------",message_signed.s)
-    print("message_signed.v------",message_signed.v + 27)
+
+    # Generate the signature
     multi_signature = Signature(message_signed.r, message_signed.s, message_signed.v)
-    print("multi_signature------",multi_signature)
-    print("nonce------",nonce)
-    
-    return (nonce, multi_signature)  # return (0, Signature(b'\0', b'\0', 0)) # Change this!
+
+    return nonce, multi_signature
+
     
 
 
